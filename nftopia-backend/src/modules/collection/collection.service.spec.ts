@@ -12,8 +12,6 @@ import {
 
 describe('CollectionService', () => {
   let service: CollectionService;
-  let collectionRepository: Repository<Collection>;
-  let nftRepository: Repository<Nft>;
 
   const mockCollectionRepository = {
     create: jest.fn(),
@@ -61,10 +59,6 @@ describe('CollectionService', () => {
     }).compile();
 
     service = module.get<CollectionService>(CollectionService);
-    collectionRepository = module.get<Repository<Collection>>(
-      getRepositoryToken(Collection),
-    );
-    nftRepository = module.get<Repository<Nft>>(getRepositoryToken(Nft));
   });
 
   afterEach(() => {

@@ -62,7 +62,7 @@ export class CollectionController {
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() createCollectionDto: CreateCollectionDto,
-    @Request() req,
+    @Request() req: { user: { userId: string } },
   ) {
     return await this.collectionService.create(
       createCollectionDto,
@@ -75,7 +75,7 @@ export class CollectionController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateCollectionDto: UpdateCollectionDto,
-    @Request() req,
+    @Request() req: { user: { userId: string } },
   ) {
     return await this.collectionService.update(
       id,
