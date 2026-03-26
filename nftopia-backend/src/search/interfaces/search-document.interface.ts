@@ -28,7 +28,7 @@ export interface SearchNftDocument {
 
 export interface SearchProfileDocument {
   id: string;
-  address: string;
+  address: string | null;
   username: string | null;
   bio: string | null;
   avatarUrl: string | null;

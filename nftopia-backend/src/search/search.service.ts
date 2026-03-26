@@ -254,7 +254,7 @@ export class SearchService {
   private toProfileDocument(user: User): SearchProfileDocument {
     return {
       id: user.id,
-      address: user.address,
+      address: user.address ?? null,
       username: user.username ?? null,
       bio: user.bio ?? null,
       avatarUrl: user.avatarUrl ?? null,
