@@ -56,7 +56,7 @@ describe('CollectionController', () => {
   });
 
   describe('findAll', () => {
-    it('should return paginated collections', async function (this: void) {
+    it('should return paginated collections', async () => {
       const mockResult = {
         data: [mockCollection],
         total: 1,
@@ -74,7 +74,7 @@ describe('CollectionController', () => {
   });
 
   describe('findOne', () => {
-    it('should return a collection by id', async function (this: void) {
+    it('should return a collection by id', async () => {
       mockCollectionService.findOne.mockResolvedValue(mockCollection);
 
       const result = await controller.findOne(mockCollection.id);
@@ -85,7 +85,7 @@ describe('CollectionController', () => {
   });
 
   describe('findByContractAddress', () => {
-    it('should return a collection by contract address', async function (this: void) {
+    it('should return a collection by contract address', async () => {
       mockCollectionService.findByContractAddress.mockResolvedValue(
         mockCollection,
       );
@@ -102,7 +102,7 @@ describe('CollectionController', () => {
   });
 
   describe('getStats', () => {
-    it('should return collection statistics', async function (this: void) {
+    it('should return collection statistics', async () => {
       const mockStats = {
         totalSupply: 100,
         floorPrice: '10.5',
@@ -121,7 +121,7 @@ describe('CollectionController', () => {
   });
 
   describe('getTopCollections', () => {
-    it('should return top collections', async function (this: void) {
+    it('should return top collections', async () => {
       const mockCollections = [mockCollection];
       mockCollectionService.getTopCollections.mockResolvedValue(
         mockCollections,
@@ -135,7 +135,7 @@ describe('CollectionController', () => {
   });
 
   describe('getNftsInCollection', () => {
-    it('should return NFTs in collection', async function (this: void) {
+    it('should return NFTs in collection', async () => {
       const mockResult = {
         data: [],
         total: 0,
@@ -161,7 +161,7 @@ describe('CollectionController', () => {
   });
 
   describe('create', () => {
-    it('should create a new collection', async function (this: void) {
+    it('should create a new collection', async () => {
       const createDto = {
         contractAddress: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567890ABCDEFGHIJKLMNOPQR',
         name: 'Test Collection',
@@ -182,7 +182,7 @@ describe('CollectionController', () => {
   });
 
   describe('update', () => {
-    it('should update a collection', async function (this: void) {
+    it('should update a collection', async () => {
       const updateDto = { name: 'Updated Name' };
       const mockRequest = { user: { userId: 'user-123' } };
       const updatedCollection = { ...mockCollection, ...updateDto };
