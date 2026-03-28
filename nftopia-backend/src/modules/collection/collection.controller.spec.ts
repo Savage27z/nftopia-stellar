@@ -127,7 +127,7 @@ describe('CollectionController', () => {
         mockCollections,
       );
 
-      const result = await controller.getTopCollections(10);
+      const result = await controller.getTopCollections('10');
 
       expect(result).toEqual(mockCollections);
       expect(service.getTopCollections).toHaveBeenCalledWith(10);
@@ -163,9 +163,11 @@ describe('CollectionController', () => {
   describe('create', () => {
     it('should create a new collection', async function (this: void) {
       const createDto = {
+        contractAddress: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567890ABCDEFGHIJKLMNOPQR',
         name: 'Test Collection',
         symbol: 'TEST',
         description: 'Test description',
+        imageUrl: 'https://example.com/image.png',
       };
 
       const mockRequest = { user: { userId: 'user-123' } };
