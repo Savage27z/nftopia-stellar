@@ -96,6 +96,7 @@ import { StellarAccountService } from './services/stellar-account.service';
     BidModule,
     ListingModule,
     OrderModule,
+    CollectionModule,
     StorageModule,
     SearchModule,
   ],

@@ -44,6 +44,80 @@ export class CollectionService {
     return collection;
   }
 
+  async findOne(id: string): Promise<Collection> {
+    return this.findById(id);
+  }
+
+  async findAll(
+    query: CollectionConnectionQuery,
+  ): Promise<CollectionConnectionResult> {
+    return this.findConnection(query);
+  }
+
+  async findByContractAddress(contractAddress: string): Promise<Collection> {
+    const collection = await this.collectionRepository.findOne({
+      where: { contractAddress },
+    });
+
+    if (!collection) {
+      throw new NotFoundException(
+        `Collection with contract address ${contractAddress} not found`,
+      );
+    }
+
+    return collection;
+  }
+
+  async getTopCollections(limit: number = 10): Promise<Collection[]> {
+    return this.findTopCollections(limit);
+  }
+
+  async getNftsInCollection(
+    id: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<{
+    data: Nft[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    await this.findById(id);
+
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.nftRepository.findAndCount({
+      where: { collectionId: id, isBurned: false },
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async update(
+    id: string,
+    updateDto: any,
+    userId: string,
+  ): Promise<Collection> {
+    const collection = await this.findById(id);
+
+    if (collection.creatorId !== userId) {
+      throw new BadRequestException(
+        'Only the creator can update this collection',
+      );
+    }
+
+    Object.assign(collection, updateDto);
+    return await this.collectionRepository.save(collection);
+  }
+
   async findConnection(
     query: CollectionConnectionQuery,
   ): Promise<CollectionConnectionResult> {
