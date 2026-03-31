@@ -12,4 +12,8 @@ pub enum TransactionError {
     GasLimitExceeded = 6,
     SignatureMissing = 7,
     AlreadyFinalized = 8,
+    AtomicityViolation = 9,
+    DuplicateOperationId = 10,
+    ResourceLimitExceeded = 11,
+    OperationTimedOut = 12,
 }

@@ -2,17 +2,20 @@ use soroban_sdk::{Address, Bytes, Env, Map, String, Vec, contract, contractimpl}
 
 use crate::error::TransactionError;
 use crate::events;
-use crate::storage;
+use crate::tx_storage as storage;
 use crate::types::{
     BatchExecutionResult, ExecutionResult, GasEstimate, GasOptimizationConfig, Operation,
     OperationResult, RecoveryResult, RecoveryStrategy, SignatureRecord, Transaction,
     TransactionBlueprint, TransactionState, TransactionStatus, default_gas_config,
 };
 
-const GAS_BASE_PER_OPERATION: u64 = 100;
-const GAS_PER_PARAM: u64 = 15;
-const GAS_PER_DEPENDENCY: u64 = 10;
 const STROOPS_PER_GAS: i128 = 1;
+
+use crate::security::resource_guard;
+use crate::security::validation_engine;
+use crate::storage::state_store;
+use crate::utils::error_handler;
+use crate::utils::gas_calculator;
 
 #[contract]
 pub struct TransactionContract;
@@ -26,6 +29,8 @@ impl TransactionContract {
         initial_operations: Vec<Operation>,
     ) -> Result<u64, TransactionError> {
         storage::require_creator_auth(&creator);
+
+        resource_guard::check_operation_count(initial_operations.len(), &env)?;
 
         let transaction_id = storage::next_transaction_id(&env);
         let now = env.ledger().timestamp();
@@ -49,6 +54,8 @@ impl TransactionContract {
         storage::save_transaction(&env, &tx);
         events::publish_created(&env, transaction_id, &creator);
 
+        state_store::record_transition(&env, transaction_id, TransactionState::Draft);
+
         Ok(transaction_id)
     }
 
@@ -68,6 +75,10 @@ impl TransactionContract {
         if operation.operation_id == 0 {
             return Err(TransactionError::InvalidOperation);
         }
+
+        validation_engine::validate_operation(&env, &operation)?;
+        resource_guard::check_param_count(operation.parameters.len(), &env)?;
+        resource_guard::check_operation_count(tx.operations.len() + 1, &env)?;
 
         tx.operations.push_back(operation.clone());
         tx.rollback_operations.push_back(operation.clone());
@@ -93,10 +104,16 @@ impl TransactionContract {
             return Err(TransactionError::AlreadyFinalized);
         }
 
+        // Full preflight validation
+        validation_engine::preflight(&env, &tx)?;
+
+        let gas_ceiling = max_gas.unwrap_or(resource_guard::DEFAULT_GAS_CEILING);
+
         let original_state = tx.state.clone();
         tx.state = TransactionState::Executing;
         tx.started_at = Some(env.ledger().timestamp());
         events::publish_state_changed(&env, tx.transaction_id, &original_state, &tx.state);
+        state_store::record_transition(&env, tx.transaction_id, TransactionState::Executing);
 
         let mut succeeded_ids = Vec::new(&env);
         let mut results = Vec::new(&env);
@@ -110,7 +127,9 @@ impl TransactionContract {
                 events::publish_failed(
                     &env,
                     tx.transaction_id,
-                    &tx.error_reason.clone().unwrap_or(String::from_str(&env, "unknown")),
+                    &tx.error_reason
+                        .clone()
+                        .unwrap_or(String::from_str(&env, "unknown")),
                 );
                 tx.state = TransactionState::RolledBack;
                 tx.completed_at = Some(env.ledger().timestamp());
@@ -118,23 +137,22 @@ impl TransactionContract {
                 return Err(TransactionError::DependencyNotMet);
             }
 
-            let op_gas = estimate_operation_gas(&op);
+            let op_gas = gas_calculator::op_gas(&op);
             used_gas = used_gas.saturating_add(op_gas);
 
-            if let Some(max) = max_gas {
-                if used_gas > max {
-                    tx.state = TransactionState::Failed;
-                    tx.error_reason = Some(String::from_str(&env, "max gas exceeded"));
-                    events::publish_failed(
-                        &env,
-                        tx.transaction_id,
-                        &tx.error_reason.clone().unwrap_or(String::from_str(&env, "unknown")),
-                    );
-                    tx.state = TransactionState::RolledBack;
-                    tx.completed_at = Some(env.ledger().timestamp());
-                    storage::save_transaction(&env, &tx);
-                    return Err(TransactionError::GasLimitExceeded);
-                }
+            if let Err(e) = resource_guard::check_gas_ceiling(used_gas, gas_ceiling, &env) {
+                let reason = error_handler::to_reason_string(&env, &e);
+                tx.state = TransactionState::RolledBack;
+                tx.error_reason = Some(reason.clone());
+                tx.completed_at = Some(env.ledger().timestamp());
+                events::publish_failed(&env, tx.transaction_id, &reason);
+                state_store::record_transition(
+                    &env,
+                    tx.transaction_id,
+                    TransactionState::RolledBack,
+                );
+                storage::save_transaction(&env, &tx);
+                return Err(e);
             }
 
             let result = OperationResult {
@@ -156,7 +174,13 @@ impl TransactionContract {
         tx.state = TransactionState::Completed;
 
         storage::save_transaction(&env, &tx);
-        events::publish_state_changed(&env, tx.transaction_id, &TransactionState::Executing, &tx.state);
+        events::publish_state_changed(
+            &env,
+            tx.transaction_id,
+            &TransactionState::Executing,
+            &tx.state,
+        );
+        state_store::record_transition(&env, tx.transaction_id, TransactionState::Completed);
 
         Ok(ExecutionResult {
             transaction_id,
@@ -187,37 +211,55 @@ impl TransactionContract {
         tx.completed_at = Some(env.ledger().timestamp());
         storage::save_transaction(&env, &tx);
         events::publish_state_changed(&env, tx.transaction_id, &old_state, &tx.state);
+        state_store::record_transition(&env, tx.transaction_id, TransactionState::Cancelled);
 
         Ok(())
     }
 
-    pub fn estimate_transaction_gas(env: Env, transaction_id: u64) -> Result<GasEstimate, TransactionError> {
+    pub fn estimate_transaction_gas(
+        env: Env,
+        transaction_id: u64,
+    ) -> Result<GasEstimate, TransactionError> {
         let tx = storage::load_transaction(&env, transaction_id)
             .ok_or(TransactionError::TransactionNotFound)?;
 
-        let mut gas = 0_u64;
-        for op in tx.operations.iter() {
-            gas = gas.saturating_add(estimate_operation_gas(&op));
-        }
-
-        Ok(GasEstimate {
-            estimated_gas: gas,
-            estimated_cost: (gas as i128) * STROOPS_PER_GAS,
-        })
+        Ok(gas_calculator::total_gas(&tx.operations))
     }
 
     pub fn batch_create_transactions(
         env: Env,
         transactions: Vec<TransactionBlueprint>,
     ) -> Result<Vec<u64>, TransactionError> {
+        resource_guard::check_batch_size(transactions.len(), &env)?;
         let mut ids = Vec::new(&env);
         for blueprint in transactions.iter() {
-            let id = Self::create_transaction(
-                env.clone(),
-                blueprint.creator,
-                blueprint.metadata,
-                blueprint.initial_operations,
-            )?;
+            resource_guard::check_operation_count(blueprint.initial_operations.len(), &env)?;
+
+            let transaction_id = storage::next_transaction_id(&env);
+            let now = env.ledger().timestamp();
+            let tx = Transaction {
+                transaction_id,
+                creator: blueprint.creator.clone(),
+                operations: blueprint.initial_operations.clone(),
+                state: TransactionState::Draft,
+                created_at: now,
+                started_at: None,
+                completed_at: None,
+                total_gas_used: 0,
+                total_cost: 0,
+                error_reason: None,
+                rollback_operations: Vec::new(&env),
+                signatures: Vec::new(&env),
+                metadata: blueprint.metadata.clone(),
+            };
+            storage::save_transaction(&env, &tx);
+            events::publish_created(&env, transaction_id, &blueprint.creator);
+            crate::storage::state_store::record_transition(
+                &env,
+                transaction_id,
+                TransactionState::Draft,
+            );
+            let id = transaction_id;
             ids.push_back(id);
         }
         Ok(ids)
@@ -312,6 +354,7 @@ impl TransactionContract {
         }
 
         storage::save_transaction(&env, &tx);
+        state_store::record_transition(&env, tx.transaction_id, tx.state.clone());
 
         Ok(RecoveryResult {
             transaction_id,
@@ -360,12 +403,4 @@ fn dependencies_satisfied(succeeded_ids: &Vec<u64>, required_dependencies: &Vec<
         }
     }
     true
-}
-
-fn estimate_operation_gas(op: &Operation) -> u64 {
-    let param_cost = (op.parameters.len() as u64).saturating_mul(GAS_PER_PARAM);
-    let dep_cost = (op.dependencies.len() as u64).saturating_mul(GAS_PER_DEPENDENCY);
-    GAS_BASE_PER_OPERATION
-        .saturating_add(param_cost)
-        .saturating_add(dep_cost)
 }

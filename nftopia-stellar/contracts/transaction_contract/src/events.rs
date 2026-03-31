@@ -1,11 +1,35 @@
-use soroban_sdk::{Address, Env, String, Symbol, symbol_short};
+use soroban_sdk::{Address, Env, String, contractevent};
 
 use crate::types::TransactionState;
 
-const TX_EVENT: Symbol = symbol_short!("TX");
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct TransactionCreated {
+    pub transaction_id: u64,
+    pub creator: Address,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct TransactionStateChanged {
+    pub transaction_id: u64,
+    pub from_state: TransactionState,
+    pub to_state: TransactionState,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct TransactionFailed {
+    pub transaction_id: u64,
+    pub reason: String,
+}
 
 pub fn publish_created(env: &Env, transaction_id: u64, creator: &Address) {
-    env.events().publish((TX_EVENT, symbol_short!("CREATED"), transaction_id), creator);
+    TransactionCreated {
+        transaction_id,
+        creator: creator.clone(),
+    }
+    .publish(env);
 }
 
 pub fn publish_state_changed(
@@ -14,12 +38,18 @@ pub fn publish_state_changed(
     from_state: &TransactionState,
     to_state: &TransactionState,
 ) {
-    env.events().publish(
-        (TX_EVENT, symbol_short!("STATE"), transaction_id),
-        (from_state.clone(), to_state.clone()),
-    );
+    TransactionStateChanged {
+        transaction_id,
+        from_state: from_state.clone(),
+        to_state: to_state.clone(),
+    }
+    .publish(env);
 }
 
 pub fn publish_failed(env: &Env, transaction_id: u64, reason: &String) {
-    env.events().publish((TX_EVENT, symbol_short!("FAILED"), transaction_id), reason.clone());
+    TransactionFailed {
+        transaction_id,
+        reason: reason.clone(),
+    }
+    .publish(env);
 }
