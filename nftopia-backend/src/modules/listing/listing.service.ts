@@ -13,6 +13,11 @@ import { ListingStatus } from './interfaces/listing.interface';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { StellarNft } from '../../nft/entities/stellar-nft.entity';
 
+type ListingCursorPayload = {
+  createdAt: string;
+  id: string;
+};
+
 @Injectable()
 export class ListingService {
   private readonly logger = new Logger(ListingService.name);
@@ -90,6 +95,84 @@ export class ListingService {
     qb.skip((page - 1) * limit).take(limit);
 
     return qb.getMany();
+  }
+
+  async findConnection(query: {
+    first: number;
+    after?: ListingCursorPayload;
+    status?: ListingStatus;
+    sellerId?: string;
+    nftContractId?: string;
+    nftTokenId?: string;
+  }): Promise<{
+    data: Listing[];
+    total: number;
+    hasNextPage: boolean;
+  }> {
+    const qb = this.listingRepo
+      .createQueryBuilder('l')
+      .orderBy('l.createdAt', 'DESC')
+      .addOrderBy('l.id', 'DESC');
+
+    this.applyFilters(qb, query);
+
+    if (query.after) {
+      qb.andWhere(
+        '(l.createdAt < :afterCreatedAt OR (l.createdAt = :afterCreatedAt AND l.id < :afterId))',
+        {
+          afterCreatedAt: query.after.createdAt,
+          afterId: query.after.id,
+        },
+      );
+    }
+
+    const totalQb = this.listingRepo.createQueryBuilder('l');
+    this.applyFilters(totalQb, query);
+
+    const [rows, total] = await Promise.all([
+      qb.take(query.first + 1).getMany(),
+      totalQb.getCount(),
+    ]);
+
+    return {
+      data: rows.slice(0, query.first),
+      total,
+      hasNextPage: rows.length > query.first,
+    };
+  }
+
+  private applyFilters(
+    qb: ReturnType<Repository<Listing>['createQueryBuilder']>,
+    query: {
+      status?: ListingStatus;
+      sellerId?: string;
+      nftContractId?: string;
+      nftTokenId?: string;
+    },
+  ) {
+    if (query.status) {
+      qb.andWhere('l.status = :status', { status: query.status });
+    }
+    if (query.sellerId) {
+      qb.andWhere('l.sellerId = :sellerId', { sellerId: query.sellerId });
+    }
+    if (query.nftContractId) {
+      qb.andWhere('l.nftContractId = :nftContractId', {
+        nftContractId: query.nftContractId,
+      });
+    }
+    if (query.nftTokenId) {
+      qb.andWhere('l.nftTokenId = :nftTokenId', {
+        nftTokenId: query.nftTokenId,
+      });
+    }
+
+    const status = query.status;
+    if (status === ListingStatus.ACTIVE || status == null) {
+      qb.andWhere('(l.expiresAt IS NULL OR l.expiresAt > :now)', {
+        now: new Date(),
+      });
+    }
   }
 
   async findOne(id: string) {
