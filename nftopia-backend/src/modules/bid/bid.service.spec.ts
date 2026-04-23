@@ -11,6 +11,23 @@ import {
 } from '@nestjs/common';
 import { Keypair } from 'stellar-sdk';
 
+// Prevent real Horizon HTTP calls — verifyBalance falls back to testnet URL even
+// when STELLAR_HORIZON_URL is undefined, so we stub the server at module level.
+jest.mock('stellar-sdk', () => {
+  const actual = jest.requireActual<typeof import('stellar-sdk')>('stellar-sdk');
+  return {
+    ...actual,
+    Horizon: {
+      ...actual.Horizon,
+      Server: jest.fn().mockImplementation(() => ({
+        loadAccount: jest.fn().mockResolvedValue({
+          balances: [{ asset_type: 'native', balance: '1000.0000000' }],
+        }),
+      })),
+    },
+  };
+});
+
 import { BidService } from './bid.service';
 import { Bid, BidSorobanStatus } from '../auction/entities/bid.entity';
 import { Auction } from '../auction/entities/auction.entity';
@@ -150,9 +167,7 @@ describe('BidService', () => {
 
       mockCache.get.mockResolvedValue(null); // no rate limit hit
       mockAuctionRepo.findOne.mockResolvedValue(auction);
-      mockBidRepo.findOne
-        .mockResolvedValueOnce(null) // validate amount: no existing highest
-        .mockResolvedValueOnce(null); // no Horizon balance check (STELLAR_HORIZON_URL = undefined)
+      mockBidRepo.findOne.mockResolvedValueOnce(null); // validate amount: no existing highest bid
       mockBidRepo.create.mockReturnValue(persisted);
       mockBidRepo.save.mockResolvedValue(persisted);
       mockAuctionRepo.save.mockResolvedValue(auction);
