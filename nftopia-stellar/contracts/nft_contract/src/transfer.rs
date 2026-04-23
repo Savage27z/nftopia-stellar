@@ -66,10 +66,9 @@ pub fn is_approved_or_owner(env: &Env, spender: &Address, token_id: u64) -> bool
         .storage()
         .persistent()
         .get::<_, Address>(&DataKey::TokenApproved(token_id))
+        && spender == &approved
     {
-        if spender == &approved {
-            return true;
-        }
+        return true;
     }
     is_approved_for_all(env, &owner, spender)
 }
