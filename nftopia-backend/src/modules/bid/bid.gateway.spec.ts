@@ -9,8 +9,10 @@ type RoomLike = ReturnType<Server['to']>;
 
 const makeMockRoom = () => ({ emit: jest.fn() });
 
-const makeMockServer = (room: ReturnType<typeof makeMockRoom>): jest.Mocked<Server> =>
-  ({ to: jest.fn().mockReturnValue(room) } as unknown as jest.Mocked<Server>);
+const makeMockServer = (
+  room: ReturnType<typeof makeMockRoom>,
+): jest.Mocked<Server> =>
+  ({ to: jest.fn().mockReturnValue(room) }) as unknown as jest.Mocked<Server>;
 
 const makeMockClient = (id = 'client-abc'): jest.Mocked<Socket> =>
   ({
@@ -18,9 +20,11 @@ const makeMockClient = (id = 'client-abc'): jest.Mocked<Socket> =>
     join: jest.fn().mockResolvedValue(undefined),
     leave: jest.fn().mockResolvedValue(undefined),
     emit: jest.fn(),
-  } as unknown as jest.Mocked<Socket>);
+  }) as unknown as jest.Mocked<Socket>;
 
-const makeBidPayload = (override: Partial<BidPlacedEvent> = {}): BidPlacedEvent => ({
+const makeBidPayload = (
+  override: Partial<BidPlacedEvent> = {},
+): BidPlacedEvent => ({
   auctionId: 'auction-123',
   bidderId: 'user-456',
   stellarPublicKey: 'GABC1234567890EXAMPLESTELLARKEY0000000000000000000000000',
@@ -67,7 +71,9 @@ describe('BidGateway', () => {
     it('logs server initialisation', () => {
       const logSpy = jest.spyOn(Logger.prototype, 'log');
       gateway.afterInit();
-      expect(logSpy).toHaveBeenCalledWith('BidGateway WebSocket server initialised');
+      expect(logSpy).toHaveBeenCalledWith(
+        'BidGateway WebSocket server initialised',
+      );
     });
   });
 
@@ -75,12 +81,20 @@ describe('BidGateway', () => {
     it('logs the connected client id', () => {
       const debugSpy = jest.spyOn(Logger.prototype, 'debug');
       gateway.handleConnection(mockClient);
-      expect(debugSpy).toHaveBeenCalledWith(`Client connected: ${mockClient.id}`);
+      expect(debugSpy).toHaveBeenCalledWith(
+        `Client connected: ${mockClient.id}`,
+      );
     });
 
     it('handles clients with different ids without throwing', () => {
-      const clients = [makeMockClient('c-1'), makeMockClient('c-2'), makeMockClient('c-3')];
-      clients.forEach((c) => expect(() => gateway.handleConnection(c)).not.toThrow());
+      const clients = [
+        makeMockClient('c-1'),
+        makeMockClient('c-2'),
+        makeMockClient('c-3'),
+      ];
+      clients.forEach((c) =>
+        expect(() => gateway.handleConnection(c)).not.toThrow(),
+      );
     });
   });
 
@@ -88,12 +102,16 @@ describe('BidGateway', () => {
     it('logs the disconnected client id', () => {
       const debugSpy = jest.spyOn(Logger.prototype, 'debug');
       gateway.handleDisconnect(mockClient);
-      expect(debugSpy).toHaveBeenCalledWith(`Client disconnected: ${mockClient.id}`);
+      expect(debugSpy).toHaveBeenCalledWith(
+        `Client disconnected: ${mockClient.id}`,
+      );
     });
 
     it('handles multiple disconnecting clients without throwing', () => {
       const clients = [makeMockClient('d-1'), makeMockClient('d-2')];
-      clients.forEach((c) => expect(() => gateway.handleDisconnect(c)).not.toThrow());
+      clients.forEach((c) =>
+        expect(() => gateway.handleDisconnect(c)).not.toThrow(),
+      );
     });
   });
 
@@ -106,8 +124,14 @@ describe('BidGateway', () => {
     });
 
     it('returns joined event with the auctionId', () => {
-      const result = gateway.handleJoinAuction({ auctionId: 'auction-123' }, mockClient);
-      expect(result).toEqual({ event: 'joined', data: { auctionId: 'auction-123' } });
+      const result = gateway.handleJoinAuction(
+        { auctionId: 'auction-123' },
+        mockClient,
+      );
+      expect(result).toEqual({
+        event: 'joined',
+        data: { auctionId: 'auction-123' },
+      });
     });
 
     it('logs the join with client id and room', () => {
@@ -149,8 +173,14 @@ describe('BidGateway', () => {
     });
 
     it('returns left event with the auctionId', () => {
-      const result = gateway.handleLeaveAuction({ auctionId: 'auction-123' }, mockClient);
-      expect(result).toEqual({ event: 'left', data: { auctionId: 'auction-123' } });
+      const result = gateway.handleLeaveAuction(
+        { auctionId: 'auction-123' },
+        mockClient,
+      );
+      expect(result).toEqual({
+        event: 'left',
+        data: { auctionId: 'auction-123' },
+      });
     });
 
     it('logs the leave with client id and room', () => {
@@ -163,7 +193,10 @@ describe('BidGateway', () => {
 
     it('works with UUID-formatted auction ids', () => {
       const uuid = '550e8400-e29b-41d4-a716-446655440000';
-      const result = gateway.handleLeaveAuction({ auctionId: uuid }, mockClient);
+      const result = gateway.handleLeaveAuction(
+        { auctionId: uuid },
+        mockClient,
+      );
       expect(mockClient.leave).toHaveBeenCalledWith(`auction:${uuid}`);
       expect(result).toEqual({ event: 'left', data: { auctionId: uuid } });
     });
@@ -194,7 +227,10 @@ describe('BidGateway', () => {
       const payload = makeBidPayload({ auctionId: 'auction-abc' });
       gateway.handleBidPlacedEvent(payload);
       expect(mockServer.to).toHaveBeenCalledWith('auction:auction-abc');
-      expect(mockRoom.emit).toHaveBeenCalledWith('bid-placed', expect.any(Object));
+      expect(mockRoom.emit).toHaveBeenCalledWith(
+        'bid-placed',
+        expect.any(Object),
+      );
     });
 
     it('broadcasts all required bid fields', () => {
@@ -215,7 +251,10 @@ describe('BidGateway', () => {
     it('does not expose stellarPublicKey in the broadcast payload', () => {
       const payload = makeBidPayload();
       gateway.handleBidPlacedEvent(payload);
-      const callArgs = mockRoom.emit.mock.calls[0] as unknown as [string, Record<string, unknown>];
+      const callArgs = mockRoom.emit.mock.calls[0] as unknown as [
+        string,
+        Record<string, unknown>,
+      ];
       const broadcasted = callArgs[1];
       expect(broadcasted).not.toHaveProperty('stellarPublicKey');
     });
@@ -245,7 +284,9 @@ describe('BidGateway', () => {
     });
 
     it('handles PENDING soroban status', () => {
-      const payload = makeBidPayload({ sorobanStatus: BidSorobanStatus.PENDING });
+      const payload = makeBidPayload({
+        sorobanStatus: BidSorobanStatus.PENDING,
+      });
       gateway.handleBidPlacedEvent(payload);
       expect(mockRoom.emit).toHaveBeenCalledWith(
         'bid-placed',
@@ -254,7 +295,9 @@ describe('BidGateway', () => {
     });
 
     it('handles FAILED soroban status', () => {
-      const payload = makeBidPayload({ sorobanStatus: BidSorobanStatus.FAILED });
+      const payload = makeBidPayload({
+        sorobanStatus: BidSorobanStatus.FAILED,
+      });
       gateway.handleBidPlacedEvent(payload);
       expect(mockRoom.emit).toHaveBeenCalledWith(
         'bid-placed',
@@ -263,7 +306,9 @@ describe('BidGateway', () => {
     });
 
     it('handles SKIPPED soroban status', () => {
-      const payload = makeBidPayload({ sorobanStatus: BidSorobanStatus.SKIPPED });
+      const payload = makeBidPayload({
+        sorobanStatus: BidSorobanStatus.SKIPPED,
+      });
       gateway.handleBidPlacedEvent(payload);
       expect(mockRoom.emit).toHaveBeenCalledWith(
         'bid-placed',
@@ -272,11 +317,17 @@ describe('BidGateway', () => {
     });
 
     it('handles payload without optional txHash and ledgerSequence', () => {
-      const payload = makeBidPayload({ txHash: undefined, ledgerSequence: undefined });
+      const payload = makeBidPayload({
+        txHash: undefined,
+        ledgerSequence: undefined,
+      });
       expect(() => gateway.handleBidPlacedEvent(payload)).not.toThrow();
       expect(mockRoom.emit).toHaveBeenCalledWith(
         'bid-placed',
-        expect.objectContaining({ txHash: undefined, ledgerSequence: undefined }),
+        expect.objectContaining({
+          txHash: undefined,
+          ledgerSequence: undefined,
+        }),
       );
     });
 

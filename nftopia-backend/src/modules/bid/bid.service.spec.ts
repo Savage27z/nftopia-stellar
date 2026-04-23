@@ -14,7 +14,8 @@ import { Keypair } from 'stellar-sdk';
 // Prevent real Horizon HTTP calls — verifyBalance falls back to testnet URL even
 // when STELLAR_HORIZON_URL is undefined, so we stub the server at module level.
 jest.mock('stellar-sdk', () => {
-  const actual = jest.requireActual<typeof import('stellar-sdk')>('stellar-sdk');
+  const actual =
+    jest.requireActual<typeof import('stellar-sdk')>('stellar-sdk');
   return {
     ...actual,
     Horizon: {
